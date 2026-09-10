@@ -1,3 +1,13 @@
+version: '3.8'
+
+# Global Logging Defaults applied to all containers to restrict file size
+x-logging: &default-logging
+  logging:
+    driver: "json-file"
+    options:
+      max-size: "10m"
+      max-file: "3"
+
 services:
 
   redis:
@@ -23,6 +33,7 @@ services:
         limits:
           memory: 512M
           cpus: "1.0"
+    <<: *default-logging
 
   postgres:
     image: postgres:15-alpine
@@ -48,6 +59,7 @@ services:
         limits:
           memory: 1G
           cpus: "2.0"
+    <<: *default-logging
 
   fastapi:
     build:
@@ -95,6 +107,7 @@ services:
         limits:
           memory: 1G
           cpus: "2.0"
+    <<: *default-logging
 
   worker:
     build:
@@ -110,10 +123,8 @@ services:
       POSTGRES_DB: ai_interview_db
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-postgres}"
-
       API_URL: "http://fastapi:8000"
       API_TOKEN: ${API_TOKEN}
-
       WORKER_CONCURRENCY: "4"
       WORKER_ID: "${WORKER_ID:-worker-1}"
       CV_SERVICE_URL: http://cv-service:8001
@@ -151,6 +162,8 @@ services:
         limits:
           memory: 2G
           cpus: "4.0"
+    <<: *default-logging
+
   celery-beat:
     build:
       context: .
@@ -182,6 +195,7 @@ services:
       - beat
       - --loglevel=info
     restart: unless-stopped
+    <<: *default-logging
 
   cv-service:
     build:
@@ -204,6 +218,7 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+    <<: *default-logging
 
   flower:
     build:
@@ -245,6 +260,7 @@ services:
         limits:
           memory: 512M
           cpus: "1.0"
+    <<: *default-logging
 
   celery-exporter:
     image: danihodovic/celery-exporter
@@ -263,6 +279,7 @@ services:
         condition: service_healthy
     networks:
       - ai-interview-network
+    <<: *default-logging
 
   prometheus:
     image: prom/prometheus:latest
@@ -291,6 +308,7 @@ services:
       timeout: 5s
       start_period: 10s
       retries: 3
+    <<: *default-logging
 
   grafana:
     image: grafana/grafana:latest
@@ -306,6 +324,7 @@ services:
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
     networks:
       - ai-interview-network
+    <<: *default-logging
 
   jaeger:
     image: jaegertracing/all-in-one:latest
@@ -328,6 +347,7 @@ services:
         limits:
           memory: 256M
           cpus: "0.5"
+    <<: *default-logging
 
   frontend:
     build:
@@ -348,70 +368,23 @@ services:
       test:
         [
           "CMD",
-          "wget",
-          "--spider",
-          "-q",
-          "http://127.0.0.1:3000/"
+          "curl",
+          "-fsS",
+          "http://localhost:3000/"
         ]
-      interval: 15s
-      timeout: 5s
-      start_period: 30s
-      retries: 3
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-          cpus: "1.0"
-
-  digest-notifications:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: ai-interview-digest-notifications
-    ports:
-      - "8081:8080"
-    environment:
-      API_TOKEN: "${API_TOKEN:-dev-token-change-me}"
-      DIGEST_BATCH_SIZE: "5"
-    volumes:
-      - .:/app
-    networks:
-      - ai-interview-network
-    working_dir: /app/Digest-Notifications
-    command:
-      - python
-      - src/digest.py
-      - --serve
-      - --port
-      - "8080"
-      - --host
-      - "0.0.0.0"
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8080/"]
       interval: 30s
       timeout: 5s
-      start_period: 30s
       retries: 3
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-          cpus: "1.0"
+    <<: *default-logging
 
+# Required Named Volumes and Networks declaration blocks
 volumes:
   redis_data:
   postgres_data:
+  sqlite_data:
   prometheus_data:
   grafana_data:
-  sqlite_data:
 
 networks:
   ai-interview-network:
     driver: bridge
-
-  logging:
-  driver: "json-file"
-  options:
-    max-size: "10m"  
-    max-file: "5"     
